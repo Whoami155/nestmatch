@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-header">
+  <p class="eyebrow">Host a listing</p>
+  <h1>Publish Your Property</h1>
+</section>
+<form method="post" enctype="multipart/form-data" class="panel form-grid two-col">
+  <input name="title" placeholder="Title" required>
+  <input name="price" type="number" placeholder="Rent or Price" required>
+  <select name="property_type"><option>Rent</option><option>Buy</option></select>
+  <input name="location" placeholder="Location" required>
+  <textarea name="description" placeholder="Description"></textarea>
+  <div class="upload-wrap">
+    <label>Property Images</label>
+    <input name="images" type="file" accept="image/*" multiple>
+  </div>
+  <button class="primary" type="submit">Publish Listing</button>
+</form>
+{% endblock %}

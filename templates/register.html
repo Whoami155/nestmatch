@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth-layout">
+  <div class="auth-intro glass">
+    <p class="eyebrow">Start your journey</p>
+    <h1>Create Your NestMatch Profile</h1>
+    <p>Set your preferences once and let smart matching surface people and properties that fit.</p>
+    <ul class="auth-points">
+      <li>Personalized roommate matching</li>
+      <li>Swipe-ready rental and buy listings</li>
+      <li>Clean modern dashboard</li>
+    </ul>
+  </div>
+  <div class="auth-card">
+    <h2>Create Account</h2>
+    <form method="post" class="form-grid">
+      <input name="name" type="text" placeholder="Full Name" required>
+      <input name="email" type="email" placeholder="Email" required>
+      <input name="password" type="password" placeholder="Password" required>
+      <button class="primary" type="submit">Create Account</button>
+    </form>
+    <p class="muted">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></p>
+  </div>
+</section>
+{% endblock %}

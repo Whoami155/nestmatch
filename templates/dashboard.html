@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-header">
+  <p class="eyebrow">Command Center</p>
+  <h1>Your NestMatch Dashboard</h1>
+</section>
+<div class="stats-grid">
+  <div class="stat-card"><p>Matches</p><h3>{{ matches_count }}</h3></div>
+  <div class="stat-card"><p>Liked Properties</p><h3>{{ liked_properties_count }}</h3></div>
+  <div class="stat-card"><p>Messages</p><h3>{{ messages_count }}</h3></div>
+</div>
+<section class="dashboard-grid">
+  <div class="panel">
+    <h3>Profile Snapshot</h3>
+    <div class="kv"><span>Location</span><strong>{{ profile.preferred_location or '-' }}</strong></div>
+    <div class="kv"><span>Occupation</span><strong>{{ profile.occupation or '-' }}</strong></div>
+    <div class="kv"><span>Budget</span><strong>{{ profile.budget_min or 0 }} - {{ profile.budget_max or 0 }}</strong></div>
+    <a class="primary-link" href="{{ url_for('profile') }}">Edit Profile</a>
+  </div>
+  <div class="panel">
+    <h3>Quick Actions</h3>
+    <div class="quick-links">
+      <a href="{{ url_for('discover') }}">Open Discovery</a>
+      <a href="{{ url_for('properties') }}">Browse Properties</a>
+      <a href="{{ url_for('matches') }}">View Matches</a>
+    </div>
+    <form method="post" action="{{ url_for('reseed_cards') }}" style="margin-top:10px;">
+      <button class="primary" type="submit">Reseed Demo Cards</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

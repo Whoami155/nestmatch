@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-header">
+  <p class="eyebrow">Profile</p>
+  <h1>Craft Your Roommate Identity</h1>
+</section>
+<form method="post" enctype="multipart/form-data" class="panel form-grid two-col profile-form">
+  <input name="name" value="{{ user.name }}" placeholder="Name" required>
+  <input name="age" type="number" value="{{ profile.age or '' }}" placeholder="Age">
+  <input name="gender" value="{{ profile.gender or '' }}" placeholder="Gender (optional)">
+  <input name="occupation" value="{{ profile.occupation or '' }}" placeholder="Student / Working">
+  <input name="budget_min" type="number" value="{{ profile.budget_min or '' }}" placeholder="Budget Min">
+  <input name="budget_max" type="number" value="{{ profile.budget_max or '' }}" placeholder="Budget Max">
+  <input name="preferred_location" value="{{ profile.preferred_location or '' }}" placeholder="Preferred Location">
+  <select name="sleep_schedule"><option value="">Sleep Schedule</option><option {% if profile.sleep_schedule=='Early' %}selected{% endif %}>Early</option><option {% if profile.sleep_schedule=='Night' %}selected{% endif %}>Night</option></select>
+  <input name="cleanliness" type="number" min="1" max="5" value="{{ profile.cleanliness or 3 }}" placeholder="Cleanliness 1-5">
+  <input name="smoke_drink" value="{{ profile.smoke_drink or '' }}" placeholder="Smoking/Drinking">
+  <textarea name="bio" placeholder="Short bio">{{ profile.bio or '' }}</textarea>
+  <div class="upload-wrap">
+    <label>Profile Picture</label>
+    <input type="file" name="profile_picture" accept="image/*">
+  </div>
+  <div class="upload-wrap">
+    <label>Room Images (upload multiple)</label>
+    <input type="file" name="room_images" accept="image/*" multiple>
+    {% if room_images %}
+      <div class="img-row profile-room-images">
+        {% for img in room_images %}
+          <img src="{{ img }}" alt="room image">
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+  <button class="primary" type="submit">Save Profile</button>
+</form>
+{% endblock %}

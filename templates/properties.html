@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-header row">
+  <div>
+    <p class="eyebrow">Property Hub</p>
+    <h1>Discover Curated Listings</h1>
+  </div>
+  <a class="primary-link" href="{{ url_for('property_new') }}">+ Add Property</a>
+</section>
+<div id="propertyList" class="property-grid"></div>
+<script>
+fetch('/api/discover/properties').then(r=>r.json()).then(items=>{
+  const root=document.getElementById('propertyList');
+  root.innerHTML=items.map(p=>`<a class="property-tile" href="/property/${p.id}">
+    ${p.images?.[0] ? `<img src="${p.images[0]}" class="property-thumb" alt="${p.title}">` : ''}
+    <div class="property-tile-head"><h4>${p.title}</h4><span>${p.property_type}</span></div>
+    <p>${p.location}</p>
+    <strong>₹ ${Number(p.price||0).toLocaleString('en-IN')}</strong>
+    <div class="owner-mini">
+      ${p.owner_profile_picture ? `<img src="${p.owner_profile_picture}" class="owner-mini-avatar" alt="${p.owner_name || 'Owner'}">` : `<div class="owner-mini-avatar owner-fallback">👤</div>`}
+      <div>
+        <small>Posted by ${p.owner_name || 'Owner'}</small>
+        <small>${p.owner_occupation || 'Host'}${p.owner_preferred_location ? ` • ${p.owner_preferred_location}` : ''}</small>
+      </div>
+    </div>
+  </a>`).join('')||'<div class="panel"><p>No properties yet.</p></div>';
+});
+</script>
+{% endblock %}

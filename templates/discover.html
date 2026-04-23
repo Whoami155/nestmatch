@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="discover-head">
+  <div>
+    <p class="eyebrow">Smart Discovery</p>
+    <h1>Swipe To Find Your Next Nest</h1>
+  </div>
+  <div id="deckMeta" class="deck-meta">Loading recommendations...</div>
+</section>
+
+<div class="mode-toggle glass">
+  <span class="mode-slider" id="modeSlider"></span>
+  <button id="roommateMode" class="mode-btn active">Find Roommates</button>
+  <button id="propertyMode" class="mode-btn">Find Properties</button>
+</div>
+
+<section class="discover-layout">
+  <aside class="discover-side glass">
+    <h3>How it works</h3>
+    <p>Swipe right for interest, left to pass. Mutual likes unlock instant chat.</p>
+    <div class="mini-stat-card">
+      <div class="mini-stat"><span>👍 Session Likes</span><strong id="likesCount">0</strong></div>
+      <div class="mini-stat"><span>❌ Session Skips</span><strong id="skipsCount">0</strong></div>
+      <div class="mini-stat"><span>📦 Cards Remaining</span><strong id="remainingCount">0</strong></div>
+      <div class="mini-stat"><span>⭐ Super Likes</span><strong id="superLikesCount">0</strong></div>
+    </div>
+  </aside>
+
+  <div class="deck-center">
+    <div id="cardWrap" class="card-wrap"></div>
+    <div class="swipe-actions">
+      <button id="undoBtn" class="swipe-fab fab-undo" title="Undo">↩</button>
+      <button id="dislikeBtn" class="swipe-fab fab-dislike" title="Skip">❌</button>
+      <button id="superLikeBtn" class="swipe-fab fab-super" title="Super Like">⭐</button>
+      <button id="likeBtn" class="swipe-fab fab-like" title="Like">❤️</button>
+    </div>
+  </div>
+
+  <aside class="discover-side glass">
+    <h3>Pro tip</h3>
+    <p>Drag cards left/right for gesture swipes. Hover compatibility bars for detailed reasoning.</p>
+    <div class="progress-wrap">
+      <div id="progressBar" class="progress-bar"></div>
+    </div>
+  </aside>
+</section>
+
+<div id="matchPopup" class="match-popup hidden">New Match Unlocked</div>
+<script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

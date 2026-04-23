@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-header">
+  <p class="eyebrow">Connections</p>
+  <h1>Your Roommate Matches</h1>
+</section>
+<div class="match-grid">
+{% for m in matches %}
+  <div class="match-card">
+    <div>
+      <h4>{{ m.name }}</h4>
+      <p class="muted">Mutual interest confirmed</p>
+    </div>
+    <a class="primary-link" href="/chat/{{ m.id }}">Open Chat</a>
+  </div>
+{% else %}
+  <div class="panel"><p>No matches yet. Start swiping in Discover.</p></div>
+{% endfor %}
+</div>
+{% endblock %}

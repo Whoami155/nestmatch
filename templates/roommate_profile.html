@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="roommate-profile panel">
+  <div class="roommate-header">
+    {% if roommate.profile_picture %}
+      <img class="roommate-avatar-large" src="{{ roommate.profile_picture }}" alt="{{ roommate.name }}">
+    {% endif %}
+    <div>
+      <p class="eyebrow">Roommate Profile</p>
+      <h1>{{ roommate.name }}</h1>
+      <p class="muted">{{ roommate.occupation }} • {{ roommate.preferred_location }}</p>
+      <span class="compat-pill">{{ roommate.compatibility_score }}% • {{ roommate.compatibility_label }} Match</span>
+    </div>
+  </div>
+  <p class="bio">{{ roommate.bio or 'No bio provided yet.' }}</p>
+  <div class="badge-row">
+    <span class="tag">Age: {{ roommate.age or '-' }}</span>
+    <span class="tag">Sleep: {{ roommate.sleep_schedule or '-' }}</span>
+    <span class="tag">Cleanliness: {{ roommate.cleanliness }}/5</span>
+    <span class="tag">Lifestyle: {{ roommate.smoke_drink or '-' }}</span>
+  </div>
+  <div class="roommate-actions">
+    <a class="ghost-link" href="mailto:{{ roommate.email }}?subject=NestMatch%20Roommate%20Connection">Contact</a>
+    {% if roommate.can_message %}
+      <a class="primary-link" href="/chat/{{ roommate.id }}">Message</a>
+    {% else %}
+      <span class="muted">Match to unlock chat</span>
+    {% endif %}
+  </div>
+  {% if roommate.room_images %}
+  <div class="room-gallery">
+    <h3>Room Images</h3>
+    <div class="img-row">
+      {% for img in roommate.room_images %}
+        <img src="{{ img }}" alt="room image">
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

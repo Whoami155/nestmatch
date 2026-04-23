@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="property-detail panel">
+  <div class="property-detail-head">
+    <div>
+      <p class="eyebrow">Property Details</p>
+      <h1>{{ prop.title }}</h1>
+      <p class="muted">{{ prop.location }} • {{ prop.property_type }}</p>
+    </div>
+    <div class="price-line">₹ {{ prop.price }}</div>
+  </div>
+  <p class="bio">{{ prop.description }}</p>
+  {% if prop.cover_image %}
+  <img class="property-cover" src="{{ prop.cover_image }}" alt="property cover">
+  {% endif %}
+  <h3>Room Photos</h3>
+  <div class="img-row">
+    {% for img in prop.room_images %}<img src="{{ img }}" alt="room photo">{% endfor %}
+  </div>
+  <div class="owner-contact">
+    <h3>Contact Owner</h3>
+    <div class="owner-mini">
+      {% if prop.owner_picture %}
+        <img src="{{ prop.owner_picture }}" class="owner-mini-avatar" alt="{{ prop.owner_name }}">
+      {% else %}
+        <div class="owner-mini-avatar owner-fallback">👤</div>
+      {% endif %}
+      <div>
+        <p class="muted">{{ prop.owner_name }}</p>
+        <p class="muted">{{ prop.owner_occupation or 'Host' }}{% if prop.owner_location %} • {{ prop.owner_location }}{% endif %}</p>
+      </div>
+    </div>
+    {% if prop.owner_email %}
+      <a class="primary-link" href="mailto:{{ prop.owner_email }}?subject=Interest in {{ prop.title }}">Email {{ prop.owner_name }}</a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
