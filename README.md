@@ -122,7 +122,7 @@ Create a `.env` file in project root (or copy from `.env.example`):
 
 ```env
 SECRET_KEY=dev_secret_change_me
-DATABASE_URL=mysql+pymysql://root:Drip123%40@localhost:3306/edustark?charset=utf8mb4
+DATABASE_URL=mysql+pymysql://root:mypassword@localhost:3306/edustark?charset=utf8mb4
 ```
 
 Notes:
