@@ -389,9 +389,9 @@ def create_app():
     # Check if we should force SQLite mode (useful for Render free tier without MySQL)
     force_sqlite = os.getenv("FORCE_SQLITE", "").strip().lower() == "true"
     
-    # Get MongoDB URI only if not forcing SQLite
-    mongo_uri = "" if force_sqlite else os.getenv("MONGODB_URI", "").strip()
-    use_mongo = bool(mongo_uri) and not force_sqlite
+    # Get MongoDB URI only if not forcing SQLite - check if env var exists AND is not empty
+    mongo_uri = "" if force_sqlite else (os.environ.get("MONGODB_URI") or "").strip()
+    use_mongo = not force_sqlite and bool(mongo_uri) and mongo_uri.startswith("mongodb")
     
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev_secret_change_me")
     
@@ -1034,4 +1034,5 @@ def create_app():
 app, socketio = create_app()
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    # For production on Render, allow_unsafe_werkzeug bypasses the development server check
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
