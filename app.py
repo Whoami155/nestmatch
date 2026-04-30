@@ -385,11 +385,13 @@ def create_app():
     global mongo_client, mongo_db
     app = Flask(__name__)
     frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
-    mongo_uri = os.getenv("MONGODB_URI", "").strip()
-    use_mongo = bool(mongo_uri)
     
     # Check if we should force SQLite mode (useful for Render free tier without MySQL)
     force_sqlite = os.getenv("FORCE_SQLITE", "").strip().lower() == "true"
+    
+    # Get MongoDB URI only if not forcing SQLite
+    mongo_uri = "" if force_sqlite else os.getenv("MONGODB_URI", "").strip()
+    use_mongo = bool(mongo_uri) and not force_sqlite
     
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev_secret_change_me")
     
