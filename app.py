@@ -1,19 +1,37 @@
 import os
 from datetime import datetime
 import random
+from types import SimpleNamespace
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 from flask_socketio import SocketIO, emit, join_room
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from sqlalchemy import inspect
+from pymongo import MongoClient
+from bson import ObjectId
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 load_dotenv()
 
 db = SQLAlchemy()
+mongo_client = None
+mongo_db = None
+
+
+class MongoUser(UserMixin):
+    def __init__(self, doc):
+        self.doc = doc
+        self.id = str(doc["_id"])
+        self.name = doc.get("name", "")
+        self.email = doc.get("email", "")
+        self.role = doc.get("role", "user")
+
+    def get_id(self):
+        return self.id
 
 
 class User(db.Model, UserMixin):
@@ -364,35 +382,126 @@ def ensure_user_role_column():
 
 
 def create_app():
+    global mongo_client, mongo_db
     app = Flask(__name__)
+    frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+    mongo_uri = os.getenv("MONGODB_URI", "").strip()
+    use_mongo = bool(mongo_uri)
+    
+    # Check if we should force SQLite mode (useful for Render free tier without MySQL)
+    force_sqlite = os.getenv("FORCE_SQLITE", "").strip().lower() == "true"
+    
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev_secret_change_me")
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
-        "DATABASE_URL",
-        "mysql+pymysql://root:Drip123%40@localhost:3306/edustark?charset=utf8mb4",
-    )
+    
+    # Get the database URL and check if we need to fallback to SQLite
+    original_db_url = os.getenv("DATABASE_URL", "")
+    sqlite_fallback = False
+    
+    # Use SQLite if FORCE_SQLITE is set, or if no DATABASE_URL is provided
+    if force_sqlite:
+        # If FORCE_SQLITE is set, ignore DATABASE_URL and use SQLite directly
+        original_db_url = ""
+        sqlite_fallback = True
+    elif original_db_url and original_db_url.startswith("mysql"):
+        # Test if we can connect - if not, we'll fall back to SQLite
+        try:
+            from sqlalchemy import create_engine
+            test_engine = create_engine(original_db_url)
+            with test_engine.connect() as conn:
+                pass  # If this succeeds, MySQL is available
+            test_engine.dispose()
+        except Exception as e:
+            print(f"Warning: MySQL connection failed ({e}), falling back to SQLite")
+            sqlite_fallback = True
+            original_db_url = ""
+    
+    # Use SQLite if no DATABASE_URL is set or if we fell back due to connection failure
+    app.config["SQLALCHEMY_DATABASE_URI"] = original_db_url if original_db_url else "sqlite:///nestmatch.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["SESSION_COOKIE_SAMESITE"] = os.getenv("SESSION_COOKIE_SAMESITE", "None")
+    app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true"
     app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "uploads")
+    app.config["USE_MONGO"] = use_mongo
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    CORS(app, supports_credentials=True, origins=[frontend_origin])
 
-    db.init_app(app)
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+    if use_mongo:
+        mongo_client = MongoClient(mongo_uri)
+        mongo_db = mongo_client[os.getenv("MONGODB_DB", "nestmatch")]
+    else:
+        db.init_app(app)
+    socketio = SocketIO(app, cors_allowed_origins=[frontend_origin], async_mode="threading")
     login_manager = LoginManager(app)
     login_manager.login_view = "login"
 
     @login_manager.user_loader
     def load_user(user_id):
+        if app.config["USE_MONGO"]:
+            if not ObjectId.is_valid(str(user_id)):
+                return None
+            row = mongo_db.users.find_one({"_id": ObjectId(str(user_id))})
+            return MongoUser(row) if row else None
         return db.session.get(User, int(user_id))
 
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Unauthorized"}), 401
+        return redirect(url_for("login"))
+
+    def seed_mongo_demo_data():
+        if mongo_db.users.count_documents({}) > 0:
+            return
+        demo_users = [
+            {"name": "Aarav Mehta", "email": "aarav@nestmatch.demo", "password": "demo123", "occupation": "Working", "preferred_location": "Koramangala", "sleep_schedule": "Night", "cleanliness": 4, "smoke_drink": "No", "bio": "Product designer, into fitness and weekend cafes.", "budget_min": 15000, "budget_max": 24000},
+            {"name": "Sanya Rao", "email": "sanya@nestmatch.demo", "password": "demo123", "occupation": "Student", "preferred_location": "Indiranagar", "sleep_schedule": "Early", "cleanliness": 5, "smoke_drink": "No", "bio": "Architecture student, early riser, loves clean spaces.", "budget_min": 12000, "budget_max": 18000},
+            {"name": "Kabir Shah", "email": "kabir@nestmatch.demo", "password": "demo123", "occupation": "Working", "preferred_location": "HSR Layout", "sleep_schedule": "Night", "cleanliness": 3, "smoke_drink": "Occasionally", "bio": "Software engineer, chill vibe, likes cooking at home.", "budget_min": 18000, "budget_max": 32000},
+        ]
+        user_ids = []
+        for d in demo_users:
+            uid = mongo_db.users.insert_one({
+                "name": d["name"],
+                "email": d["email"],
+                "password_hash": generate_password_hash(d["password"]),
+                "role": "user",
+            }).inserted_id
+            user_ids.append(uid)
+            mongo_db.profiles.insert_one({
+                "user_id": str(uid),
+                "occupation": d["occupation"],
+                "preferred_location": d["preferred_location"],
+                "sleep_schedule": d["sleep_schedule"],
+                "cleanliness": d["cleanliness"],
+                "smoke_drink": d["smoke_drink"],
+                "bio": d["bio"],
+                "budget_min": d["budget_min"],
+                "budget_max": d["budget_max"],
+                "profile_picture": "",
+                "room_images_csv": "",
+            })
+        demo_props = [
+            {"owner_id": str(user_ids[0]), "title": "Premium 2BHK in Koramangala", "price": 42000, "property_type": "Rent", "location": "Koramangala, Bangalore", "description": "Modern 2BHK with balcony.", "images": []},
+            {"owner_id": str(user_ids[1]), "title": "Compact Studio Near Metro", "price": 22000, "property_type": "Rent", "location": "Indiranagar, Bangalore", "description": "Fully furnished studio.", "images": []},
+            {"owner_id": str(user_ids[2]), "title": "3BHK Family Apartment", "price": 7800000, "property_type": "Buy", "location": "HSR Layout, Bangalore", "description": "Spacious 3BHK with gym.", "images": []},
+        ]
+        mongo_db.properties.insert_many(demo_props)
+
     with app.app_context():
-        db.create_all()
-        ensure_user_role_column()
-        ensure_profile_room_images_column()
-        seed_demo_data()
-        ensure_minimum_demo_cards()
-        backfill_property_media()
-        backfill_profile_media()
+        if app.config["USE_MONGO"]:
+            seed_mongo_demo_data()
+        else:
+            db.create_all()
+            ensure_user_role_column()
+            ensure_profile_room_images_column()
+            seed_demo_data()
+            ensure_minimum_demo_cards()
+            backfill_property_media()
+            backfill_profile_media()
 
     def matched(a, b):
+        if app.config["USE_MONGO"]:
+            x, y = sorted([str(a), str(b)])
+            return mongo_db.matches.find_one({"user_a": x, "user_b": y}) is not None
         x, y = pair(a, b)
         return Match.query.filter_by(user_a=x, user_b=y).first() is not None
 
@@ -437,6 +546,57 @@ def create_app():
     def logout():
         logout_user()
         return redirect(url_for("login"))
+
+    @app.route("/api/auth/login", methods=["POST"])
+    def api_login():
+        data = request.get_json(silent=True) or {}
+        email = str(data.get("email", "")).strip().lower()
+        password = str(data.get("password", ""))
+        if app.config["USE_MONGO"]:
+            row = mongo_db.users.find_one({"email": email})
+            if not row or not check_password_hash(row.get("password_hash", ""), password):
+                return jsonify({"ok": False, "error": "Invalid credentials"}), 401
+            login_user(MongoUser(row))
+            return jsonify({"ok": True, "user": {"id": str(row["_id"]), "name": row.get("name", ""), "email": row.get("email", "")}})
+        user = User.query.filter_by(email=email).first()
+        if not user or not check_password_hash(user.password_hash, password):
+            return jsonify({"ok": False, "error": "Invalid credentials"}), 401
+        login_user(user)
+        return jsonify({"ok": True, "user": {"id": user.id, "name": user.name, "email": user.email}})
+
+    @app.route("/api/auth/logout", methods=["POST"])
+    @login_required
+    def api_logout():
+        logout_user()
+        return jsonify({"ok": True})
+
+    @app.route("/api/auth/me")
+    def api_me():
+        if not current_user.is_authenticated:
+            return jsonify({"authenticated": False}), 401
+        if app.config["USE_MONGO"]:
+            p = mongo_db.profiles.find_one({"user_id": str(current_user.get_id())}) or {}
+            return jsonify({
+                "authenticated": True,
+                "user": {
+                    "id": current_user.get_id(),
+                    "name": getattr(current_user, "name", ""),
+                    "email": getattr(current_user, "email", ""),
+                    "occupation": p.get("occupation", ""),
+                    "preferred_location": p.get("preferred_location", ""),
+                },
+            })
+        p = get_profile(current_user.id)
+        return jsonify({
+            "authenticated": True,
+            "user": {
+                "id": current_user.id,
+                "name": current_user.name,
+                "email": current_user.email,
+                "occupation": p.occupation if p else "",
+                "preferred_location": p.preferred_location if p else "",
+            },
+        })
 
     @app.route("/dashboard")
     @login_required
@@ -624,6 +784,23 @@ def create_app():
         data = request.get_json(silent=True) or {}
         tid = parse_int(data.get("target_user_id"), -1)
         action = data.get("action")
+        if app.config["USE_MONGO"]:
+            tid_raw = str(data.get("target_user_id", "")).strip()
+            if not tid_raw or tid_raw == str(current_user.get_id()) or action not in {"like", "dislike", "superlike"}:
+                return jsonify({"error": "Invalid request"}), 400
+            mongo_db.swipes.update_one(
+                {"user_id": str(current_user.get_id()), "target_user_id": tid_raw},
+                {"$set": {"action": action, "timestamp": datetime.utcnow()}},
+                upsert=True,
+            )
+            reverse = mongo_db.swipes.find_one({"user_id": tid_raw, "target_user_id": str(current_user.get_id())})
+            match_created = False
+            if action in {"like", "superlike"} and reverse and reverse.get("action") in {"like", "superlike"}:
+                a, b = sorted([str(current_user.get_id()), tid_raw])
+                if not mongo_db.matches.find_one({"user_a": a, "user_b": b}):
+                    mongo_db.matches.insert_one({"user_a": a, "user_b": b, "created_at": datetime.utcnow()})
+                    match_created = True
+            return jsonify({"ok": True, "match_created": match_created})
         if tid <= 0 or tid == current_user.id or action not in {"like", "dislike", "superlike"}:
             return jsonify({"error": "Invalid request"}), 400
         s = Swipe.query.filter_by(user_id=current_user.id, target_user_id=tid).first() or Swipe(user_id=current_user.id, target_user_id=tid)
@@ -646,6 +823,16 @@ def create_app():
         data = request.get_json(silent=True) or {}
         pid = parse_int(data.get("property_id"), -1)
         action = data.get("action")
+        if app.config["USE_MONGO"]:
+            pid_raw = str(data.get("property_id", "")).strip()
+            if not pid_raw or action not in {"like", "dislike", "superlike"}:
+                return jsonify({"error": "Invalid request"}), 400
+            mongo_db.property_swipes.update_one(
+                {"user_id": str(current_user.get_id()), "property_id": pid_raw},
+                {"$set": {"action": action, "timestamp": datetime.utcnow()}},
+                upsert=True,
+            )
+            return jsonify({"ok": True})
         if pid <= 0 or action not in {"like", "dislike", "superlike"}:
             return jsonify({"error": "Invalid request"}), 400
         s = PropertySwipe.query.filter_by(user_id=current_user.id, property_id=pid).first() or PropertySwipe(user_id=current_user.id, property_id=pid)
@@ -660,6 +847,20 @@ def create_app():
     def undo_swipe():
         data = request.get_json(silent=True) or {}
         kind = str(data.get("kind", "")).strip().lower()
+        if app.config["USE_MONGO"]:
+            if kind == "roommate":
+                row = mongo_db.swipes.find_one({"user_id": str(current_user.get_id())}, sort=[("timestamp", -1)])
+                if not row:
+                    return jsonify({"ok": False, "message": "Nothing to undo"}), 404
+                mongo_db.swipes.delete_one({"_id": row["_id"]})
+                return jsonify({"ok": True, "item_id": row.get("target_user_id", "")})
+            if kind == "property":
+                row = mongo_db.property_swipes.find_one({"user_id": str(current_user.get_id())}, sort=[("timestamp", -1)])
+                if not row:
+                    return jsonify({"ok": False, "message": "Nothing to undo"}), 404
+                mongo_db.property_swipes.delete_one({"_id": row["_id"]})
+                return jsonify({"ok": True, "item_id": row.get("property_id", "")})
+            return jsonify({"ok": False, "message": "Invalid kind"}), 400
         if kind == "roommate":
             row = Swipe.query.filter_by(user_id=current_user.id).order_by(Swipe.timestamp.desc()).first()
             if not row:
@@ -679,6 +880,43 @@ def create_app():
     @app.route("/api/discover/roommates")
     @login_required
     def discover_roommates():
+        if app.config["USE_MONGO"]:
+            me_id = str(current_user.get_id())
+            me_prof_doc = mongo_db.profiles.find_one({"user_id": me_id}) or {}
+            me_prof = SimpleNamespace(**me_prof_doc)
+            swiped = {x.get("target_user_id") for x in mongo_db.swipes.find({"user_id": me_id})}
+            out = []
+            for u in mongo_db.users.find({"_id": {"$ne": ObjectId(me_id)}}):
+                uid = str(u["_id"])
+                if uid in swiped:
+                    continue
+                p_doc = mongo_db.profiles.find_one({"user_id": uid}) or {}
+                p = SimpleNamespace(**p_doc)
+                score, label = compatibility_score(me_prof, p)
+                breakdown = compatibility_breakdown(me_prof, p)
+                smart_tag = "🔥 Highly compatible for work-life balance" if score >= 82 else ("🎯 Perfect budget match" if breakdown["budget"] >= 88 else "✨ Promising compatibility blend")
+                out.append({
+                    "id": uid,
+                    "name": u.get("name", "User"),
+                    "email": u.get("email", ""),
+                    "occupation": p_doc.get("occupation", ""),
+                    "preferred_location": p_doc.get("preferred_location", ""),
+                    "bio": p_doc.get("bio", ""),
+                    "sleep_schedule": p_doc.get("sleep_schedule", ""),
+                    "cleanliness": p_doc.get("cleanliness", 3),
+                    "smoke_drink": p_doc.get("smoke_drink", ""),
+                    "profile_picture": p_doc.get("profile_picture", ""),
+                    "can_message": matched(me_id, uid),
+                    "compatibility_score": score,
+                    "compatibility_label": label,
+                    "budget_min": p_doc.get("budget_min", 0),
+                    "budget_max": p_doc.get("budget_max", 0),
+                    "interests": infer_interests(p),
+                    "distance_km": estimate_distance_km(me_prof, p),
+                    "compatibility_breakdown": breakdown,
+                    "smart_tag": smart_tag,
+                })
+            return jsonify(out[:50])
         swiped = {x.target_user_id for x in Swipe.query.filter_by(user_id=current_user.id).all()}
         out = []
         for u in User.query.filter(User.id != current_user.id).all():
@@ -715,6 +953,31 @@ def create_app():
     @app.route("/api/discover/properties")
     @login_required
     def discover_properties():
+        if app.config["USE_MONGO"]:
+            me_id = str(current_user.get_id())
+            swiped = {x.get("property_id") for x in mongo_db.property_swipes.find({"user_id": me_id})}
+            out = []
+            for p in mongo_db.properties.find().sort("_id", -1):
+                pid = str(p["_id"])
+                if pid in swiped:
+                    continue
+                owner = mongo_db.users.find_one({"_id": ObjectId(p.get("owner_id"))}) if ObjectId.is_valid(str(p.get("owner_id", ""))) else None
+                owner_profile = mongo_db.profiles.find_one({"user_id": str(p.get("owner_id", ""))}) or {}
+                out.append({
+                    "id": pid,
+                    "title": p.get("title", "Property"),
+                    "price": p.get("price", 0),
+                    "property_type": p.get("property_type", "Rent"),
+                    "location": p.get("location", ""),
+                    "description": p.get("description", ""),
+                    "images": p.get("images", []),
+                    "owner_name": owner.get("name", "Owner") if owner else "Owner",
+                    "owner_email": owner.get("email", "") if owner else "",
+                    "owner_profile_picture": owner_profile.get("profile_picture", ""),
+                    "owner_occupation": owner_profile.get("occupation", ""),
+                    "owner_preferred_location": owner_profile.get("preferred_location", ""),
+                })
+            return jsonify(out[:50])
         swiped = {x.property_id for x in PropertySwipe.query.filter_by(user_id=current_user.id).all()}
         out = []
         for p in Property.query.order_by(Property.id.desc()).all():
